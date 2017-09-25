@@ -161,7 +161,6 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 }
 
 int main() {
-  cout << "in main" << endl ;
 
   uWS::Hub h;
 
@@ -212,7 +211,6 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     //auto sdata = string(data).substr(0, length);
-    //cout << sdata << endl;
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
 
       auto s = hasData(data);
@@ -224,7 +222,6 @@ int main() {
         
         if (event == "telemetry") {
             // j[1] is the data JSON object
-            cout << "Is telemetry" << endl;
           
         	// Main car's localization Data
           	double car_x = j[1]["x"];
@@ -233,14 +230,6 @@ int main() {
           	double car_d = j[1]["d"];
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"];
-
-            cout << "telemetry event" << endl ;
-            cout << " x:" << car_x ;
-            cout << " y:" << car_y ;
-            cout << " s:" << car_s ;
-            cout << " d:" << car_d ;
-            cout << " yaw:" << car_yaw ;
-            cout << " speed:" << car_speed << endl;
 
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
@@ -362,7 +351,6 @@ int main() {
             // if previous size is almost empty, use the car as starting reference
             if(prev_size < 2)
             {
-                cout << "< 2" << endl;
                 double prev_car_x = car_x - cos(car_yaw);
                 double prev_car_y = car_y - sin(car_yaw);
 
@@ -375,7 +363,6 @@ int main() {
             // use the previous path's end points as starting reference
             else
             {
-                cout << ">= 2" << endl;
                 //Redefine reference state as previous path and point
                 ref_x = previous_path_x[prev_size-1];
                 ref_y = previous_path_y[prev_size-1];
@@ -430,7 +417,6 @@ int main() {
 
             double x_add_on = 0;
 
-            cout <<"======"<<endl;
             
             //Fill up the rest of our path planner after filling it with previous point, here we will always output 50 points
             for (int i = 1; i <= 50-previous_path_x.size(); i++){
@@ -459,17 +445,12 @@ int main() {
                 next_y_vals.push_back( y_point );
             }
 
-
-            //22.46 39.08 min start of spline code
-            //40 min fix reerend start
-
           	json msgJson;
 
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
-            cout << msg << endl ;
 
           	//this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
