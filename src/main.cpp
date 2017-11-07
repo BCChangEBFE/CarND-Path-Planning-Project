@@ -12,6 +12,14 @@
 
 using namespace std;
 
+// define vehicle struct
+struct one_vehicle_struct {
+    int id;
+    double d_s;
+    double v;
+    bool tooClose;
+};
+
 // for convenience
 using json = nlohmann::json;
 
@@ -19,6 +27,21 @@ using json = nlohmann::json;
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+
+// Convert d-value to corresponding lane number
+int convertDToLaneNumber (double d) {
+      if (d < 4.0) {return 0;}
+        if (d >= 4.0 and d < 8.0) {return 1;}
+          if (d > 8.0) {return 2;}
+            return -1;
+}
+// convert lane number to corresponding d-value
+double convertLaneNumberToD (int laneNumber ) {
+      if (laneNumber == 0) {return 2.0;}
+        if (laneNumber == 1) {return 6.0;}
+          if (laneNumber == 2) {return 10.0;}
+            return 14.0;
+}
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -161,6 +184,7 @@ vector<double> getXY(double s, double d, vector<double> maps_s, vector<double> m
 }
 
 int main() {
+  cout << "in main" << endl ;
 
   uWS::Hub h;
 
@@ -200,17 +224,19 @@ int main() {
 
   //start in lane 1; 
   int lane = 1;
+  int num_of_lanes = 3; //could change, though static current environment
 
   //have a reference velocity to target
-  double speed_limit = 49.5;
+  double speed_limit = 49.5; //could change, though static in current environment 
   double ref_vel = 0.00; //mph
 
-  h.onMessage([&speed_limit, &ref_vel, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&num_of_lanes, &speed_limit, &ref_vel, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy,&lane](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     //auto sdata = string(data).substr(0, length);
+    //cout << sdata << endl;
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
 
       auto s = hasData(data);
@@ -231,6 +257,14 @@ int main() {
           	double car_yaw = j[1]["yaw"];
           	double car_speed = j[1]["speed"];
 
+            cout << "telemetry event" << endl ;
+            cout << " x:" << car_x ;
+            cout << " y:" << car_y ;
+            cout << " s:" << car_s ;
+            cout << " d:" << car_d ;
+            cout << " yaw:" << car_yaw ;
+            cout << " speed:" << car_speed << endl;
+
           	// Previous path data given to the Planner
           	auto previous_path_x = j[1]["previous_path_x"];
           	auto previous_path_y = j[1]["previous_path_y"];
@@ -244,99 +278,159 @@ int main() {
             int prev_size = previous_path_x.size();
 
 
-            /////
+            ////// Start of Main Path Planning Logic //////
+            // updating car_s
             if (prev_size > 0)
             {
                 car_s = end_path_s;
             }
 
-            bool too_close = false;
-            bool right_lane_ok = true;
-            bool left_lane_ok = true;
+            //Define some one_vehicle_struct and initializing to some safe number
+            //The closest leading car in each lane
+            one_vehicle_struct leading_cars[num_of_lanes];
+            //The closest rear car in each lane
+            one_vehicle_struct rear_cars[num_of_lanes];
+            for(int i = 0; i< num_of_lanes; i++)
+            {
+                leading_cars[i].d_s = 200;
+                leading_cars[i].v = speed_limit;
+                leading_cars[i].tooClose = false;
+                rear_cars[i].d_s = -200;
+                rear_cars[i].v= 0;
+                rear_cars[i].tooClose = false;
+            }
 
-            //find rev_v to use
+            // Loop trough all vehicles on road
+            // fill in leading_cars and rear_cars, i.e. we don't care about any other cars on the road
             for(int i = 0; i < sensor_fusion.size(); i++)
             {
                 float d = sensor_fusion[i][6];
-                
-                //check if left lane change is not ok
-                if (lane == 0)
+                double vx = sensor_fusion[i][3];
+                double vy = sensor_fusion[i][4];
+                double check_speed = sqrt(vx*vx+vy*vy);
+                double check_car_s = sensor_fusion[i][5];
+                check_car_s += ((double)prev_size*0.02*check_speed); 
+                double d_s = check_car_s-car_s;
+                int check_car_lane = convertDToLaneNumber(d);
+                //leading car
+                if ((d_s > 0) and (d_s < leading_cars[check_car_lane].d_s))
                 {
-                    left_lane_ok = false;
-                }
-                else if(d < (2+4*(lane-1)+2) && d > (2+4*(lane-1)-2) )
-                {
-                    double vx = sensor_fusion[i][3];
-                    double vy = sensor_fusion[i][4];
-                    double check_speed = sqrt(vx*vx+vy*vy);
-                    double check_car_s = sensor_fusion[i][5];
-
-                    check_car_s += ((double)prev_size*0.02*check_speed); //
-
-                    if(((check_car_s > car_s) && (check_car_s-car_s)<40) || ((check_car_s < car_s) && (car_s-check_car_s)<20))
+                    leading_cars[check_car_lane].id = i;    
+                    leading_cars[check_car_lane].d_s = d_s;    
+                    leading_cars[check_car_lane].v = check_speed;    
+                    if (d_s < 30)
                     {
-                        left_lane_ok = false;
+                        leading_cars[check_car_lane].tooClose = true;
                     }
                 }
-
-                //check if right lane change is not ok
-                if (lane == 2)
+                //rear car
+                else if ((d_s < 0) and (d_s > rear_cars[check_car_lane].d_s))
                 {
-                    right_lane_ok = false;
-                }
-                else if(d < (2+4*(lane+1)+2) && d > (2+4*(lane+1)-2) )
-                {
-                    double vx = sensor_fusion[i][3];
-                    double vy = sensor_fusion[i][4];
-                    double check_speed = sqrt(vx*vx+vy*vy);
-                    double check_car_s = sensor_fusion[i][5];
-
-                    check_car_s += ((double)prev_size*0.02*check_speed); //
-
-                    if(((check_car_s > car_s) && (check_car_s-car_s)<40) || ((check_car_s < car_s) && (car_s-check_car_s)<20))
+                    rear_cars[check_car_lane].id = i;    
+                    rear_cars[check_car_lane].d_s = d_s;    
+                    rear_cars[check_car_lane].v = check_speed;    
+                    if (d_s > -30)
                     {
-                        right_lane_ok = false;
-                    }
-                }
-
-                //check if too close
-                if(d < (2+4*lane+2) && d > (2+4*lane-2) )
-                {
-                    double vx = sensor_fusion[i][3];
-                    double vy = sensor_fusion[i][4];
-                    double check_speed = sqrt(vx*vx+vy*vy);
-                    double check_car_s = sensor_fusion[i][5];
-
-                    check_car_s += ((double)prev_size*0.02*check_speed); //
-
-                    if((check_car_s > car_s) && (check_car_s-car_s)<30)
-                    {
-                        too_close = true;
+                        rear_cars[check_car_lane].tooClose = true;
                     }
                 }
             }
 
-            if(too_close)
+            //calculate cost
+            int costs[num_of_lanes];
+            for(int i = 0; i < num_of_lanes ; i++)
             {
-                if (left_lane_ok)
+                costs[i] = 0;
+                int leading_d_s_cost = 2;
+                int change_lane_cost = 150;
+                int leading_v_cost = 1;
+                int tooCloseChangeLaneCost = 99999;
+                costs[i] += leading_d_s_cost * (200 - leading_cars[i].d_s);
+                costs[i] += leading_v_cost * (speed_limit - leading_cars[i].v);
+                if (i != lane)
                 {
-                    lane = lane - 1;
+                    costs[i] += abs(change_lane_cost - lane);
                 }
-                else if (right_lane_ok)        
+                // chekc to see if target and intermediate lanes are not dangerous
+                if (lane < i)
                 {
-                    lane = lane + 1;
+                    for (int j = lane+1; j <= i; j++)
+                    {
+                        if (leading_cars[j].tooClose || rear_cars[j].tooClose)
+                        {
+                            costs[i] += tooCloseChangeLaneCost;
+                        }
+                    }
+                }
+                else if (i < lane)
+                {
+                    for (int j = i; j <= lane-1; j++)
+                    {
+                        if (leading_cars[j].tooClose || rear_cars[j].tooClose)
+                        {
+                            costs[i] += tooCloseChangeLaneCost;
+                        }
+                    }
+                }
+            }
+
+            //pick lowest cost as target lane
+            int min_cost = 99999;
+            int target_lane = lane;
+            for(int i = 0; i < num_of_lanes; i++)
+            {
+                if (costs[i] < min_cost)
+                {
+                    min_cost = costs[i];
+                    target_lane = i;
+                }
+            }
+            //adjust target lane to make sure it is only one lane away, i.e. not safe to shift 2 lanes at one
+            if (target_lane > lane)
+            {
+                target_lane = lane +1;
+            }
+            else if (target_lane < lane)
+            {
+                target_lane = lane -1;
+            }
+            
+            //adjust speed to be safe for car_infront and target lane car
+            double leading_speed = leading_cars[lane].v;
+            if (leading_cars[target_lane].v < leading_speed)
+            {
+                leading_speed = leading_cars[target_lane].v;
+            }
+
+            //////// printing some info
+            cout << "costs:  " << costs[0] << " " << costs [1] << " " << costs[2] << endl;
+            cout << "lane: " << lane << "     target_lane:" << target_lane << "     v_leading_car:" << leading_speed << endl;
+            ///////
+            
+            if ((ref_vel > leading_speed) && (leading_cars[lane].tooClose || leading_cars[target_lane].tooClose))
+            {
+                if ( (ref_vel - 0.4) > leading_speed)
+                {
+                    ref_vel -= 0.4;
                 }
                 else
                 {
-                    ref_vel -=.224;
+                    ref_vel = leading_speed - 0.00001;
                 }
             }
             else if (ref_vel < speed_limit)
             {
-                ref_vel += .224;
+                ref_vel += 0.224;
             }
-            
-            ////
+
+            //update lane only if delta d not too big, to avoid changing lane way too fast
+            if (abs(car_d - convertLaneNumberToD(target_lane)) < 4.2 )
+            {
+                lane = target_lane;
+            }
+
+            ////// End Of Main Path Planning Logic //////
+
 
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
@@ -351,6 +445,7 @@ int main() {
             // if previous size is almost empty, use the car as starting reference
             if(prev_size < 2)
             {
+                cout << "< 2" << endl;
                 double prev_car_x = car_x - cos(car_yaw);
                 double prev_car_y = car_y - sin(car_yaw);
 
@@ -417,6 +512,7 @@ int main() {
 
             double x_add_on = 0;
 
+            cout <<"======"<<endl;
             
             //Fill up the rest of our path planner after filling it with previous point, here we will always output 50 points
             for (int i = 1; i <= 50-previous_path_x.size(); i++){
@@ -445,12 +541,17 @@ int main() {
                 next_y_vals.push_back( y_point );
             }
 
+
+            //22.46 39.08 min start of spline code
+            //40 min fix reerend start
+
           	json msgJson;
 
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
           	auto msg = "42[\"control\","+ msgJson.dump()+"]";
+            //cout << msg << endl ;
 
           	//this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
@@ -497,3 +598,4 @@ int main() {
   }
   h.run();
 }
+
