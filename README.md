@@ -30,6 +30,9 @@ Right lane change maneuver is take if all of the below are satisfied
    * No car in the right lane 50m infront
    * No car in the right lane 20m behind
 
+###
+An sample run of the algorithm can be found at 
+https://www.youtube.com/watch?v=5pJoi-POXxw
 
 ## resources:
 The basic path planning logic and code follows the implementation descripbed in:
