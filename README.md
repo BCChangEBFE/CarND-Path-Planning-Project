@@ -9,7 +9,9 @@ Most of the ideas are directly from the Path Planning Walkthrough Video from the
 ### Speed 
 To avoid accelerating too fast, initial reference_velocity is set at 0, while speed limit is set at 49.5mph to avoid passing speed limit. For every telemetry event that the path-planing algorithm observes, the reference_velocy may be 
  * increased by 0.224mph if safe and under speed limit
- * decreased by 0.224mph if too close the the car infront and in the same lane
+ * decreased to the higher speed of the following 2 options 
+     ** speed of the leading car - 0.00001mph 
+     ** current spee - 0.4mpg
  
 ### Path Trajectory
 The next planned trajectory points to be followed are always a list of 50 points, and they consists of
@@ -19,16 +21,14 @@ The next planned trajectory points to be followed are always a list of 50 points
    * 3 30meters spaced points ahead of the starting reference. Note that if a change lane manuver is in place, these 3 points could be pointing to the adjacent lane. 
 
 ### Lane Change Decision
-Left lane change maneuver is take if all of the below are satisfied
- * Car in front is slower too close
- * Left Lane change is if safe. Where left lane change is safe if:
-   * No car in the left lane 50m infront
-   * No car in the left lane 20m behind
-Right lane change maneuver is take if all of the below are satisfied
- * Car in front is slower too close
- * Right lane change is safe, and left lane change is not safe. Where right lane change is safe if:
-   * No car in the right lane 50m infront
-   * No car in the right lane 20m behind
+A simple cost based algorithm is implemented. In the calculation of cost funcion, only the closest leading car and closest rear car in each lane is considered. Also the algorithm only searches for a fixed distance forward and backward while ignoreing cars that are simply too far away. For each lane a cost is calculated and the lane with smallest cost is chosen to be the next target lane. However, logic is also put in to make sure a lane change of 2 or more lane is not allowed. The cost for each lane are calculated based on the following parameters, 
+ * Distance to leading car
+ * Velocity of leading car
+ * Number of lane changed. 
+   ** i.e. cost += abs(target_lane - lane) * Constant
+ * If leading car or rear is actually too close
+ 
+Current implementation is working well. However There are many places that can potentially be improved. For example: an estimated future position of the leading and rear car should also be put into consideration; the definition of **to close** can take into consideration of ego vehicle and surrounding cars (instead of just relying on a fixed distance check).
 
 ###
 An sample run of the algorithm can be found at 
