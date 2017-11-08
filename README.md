@@ -28,7 +28,7 @@ A simple cost based algorithm is implemented. In the calculation of cost funcion
    ** i.e. cost += abs(target_lane - lane) * Constant
  * If leading car or rear is actually too close
  
-Current implementation is working well. However There are many places that can potentially be improved. For example: an estimated future position of the leading and rear car should also be put into consideration; the definition of **to close** can take into consideration of ego vehicle and surrounding cars (instead of just relying on a fixed distance check).
+The simple cost based implementation is working well and allows tuning the parameter to result in a vehicle that changes lane more aggressively. However There are many places that can potentially be improved. For example: an estimated future position of the leading and rear car should also be put into consideration; the definition of **to close** can take into consideration of ego vehicle and surrounding cars (instead of just relying on a fixed distance check).
 
 ###
 An sample run of the algorithm can be found at 
