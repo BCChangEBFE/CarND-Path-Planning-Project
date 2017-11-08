@@ -41,3 +41,5 @@ https://www.youtube.com/watch?v=7sI3VHFPP0w
 spline.h is from 
 http://kluge.in-chemnitz.de/opensource/spline/spline.h
 
+Simulator used for testing and to generate the video can be found at 
+https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2
